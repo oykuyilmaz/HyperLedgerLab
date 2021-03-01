@@ -127,6 +127,11 @@ fabric_orderer_loglevel: "DEBUG"
 # Dynamic Variables
 nfs_server_ip: "{{ groups['kube-nfs'][0] }}"
 nfs_server_mount_dir: "/opt/share"
+# TODO: Get all worker ips according to the size of kube-node
+worker_server_ips:
+  - "{{ groups['kube-node'][0] }}"
+  - "{{ groups['kube-node'][1] }}"
+  - "{{ groups['kube-node'][2] }}"
 
 # kubernetes kubectl command
 k8s_kubectl_cmd: "{{ lookup('env', 'INVENTORY_DIR_PATH') }}/cluster/artifacts/kubectl --kubeconfig={{ lookup('env', 'INVENTORY_DIR_PATH') }}/cluster/artifacts/admin.conf"

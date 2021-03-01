@@ -11,6 +11,10 @@ OrdererOrgs:
     Domain: {{ orderer_domain }}
     Template:
       Count: {{ fabric_num_orderer|int }}
+      SANS:
+{% for worker_ip in worker_server_ips %}
+        - {{ worker_ip }}
+{% endfor %}
     # ---------------------------------------------------------------------------
     # "Specs" - See PeerOrgs below for complete description
     # ---------------------------------------------------------------------------
@@ -33,6 +37,10 @@ PeerOrgs:
     Domain: org{{ loop.index }}
     Template:
       Count: {{ fabric_peers_per_org|int }}
+      SANS:
+{% for worker_ip in worker_server_ips %}
+        - {{ worker_ip }}
+{% endfor %}
     Users:
       Count: 1
 {% endfor %}
