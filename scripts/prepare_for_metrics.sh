@@ -30,8 +30,6 @@ export ORDERER_CA="${FABRIC_CFG_PATH}/${CRYPTO_CONFIG_DIRNAME}/ordererOrganizati
 #TODO: Current init function is only valid for fabcar chaincode
 export CHAINCODE_INIT_FUNCTION="queryAllCars"
 
-
-
 echo "Creating ${CHANNEL_NAME}..."
 run_in_org_cli 1 "peer channel create -c ${CHANNEL_NAME} --orderer orderer0.${ORDERER_DOMAIN}:7050 --tls --cafile ${ORDERER_CA} -f ./${CHANNEL_ARTIFACTS_DIR_NAME}/${CHANNEL_NAME}.tx"
 
@@ -51,7 +49,7 @@ done
 echo "Creating and installing chaincode ${CHAINCODE_ID} for all organizations..."
 for ((i = 1; i <= ${NUM_OF_ORG}; i++)); do
     copy_to_org_cli ${i} "${CHAINCODE_DIR}/." "./${CHAINCODE_ID}/"
-    run_in_org_cli ${i} "peer lifecycle chaincode package ${CHAINCODE_ID}.tar.gz --path \"./${CHAINCODE_ID}/\" --lang ${CHAINCODE_LANGUAGE} --label ${CHAINCODE_LABEL}"
+    run_in_org_cli ${i} "peer lifecycle chaincode package ${CHAINCODE_ID}.tar.gz --path \"./${CHAINCODE_ID}/${CHAINCODE_LANGUAGE}\" --lang ${CHAINCODE_LANGUAGE} --label ${CHAINCODE_LABEL}"
     for ((j = 0; j < ${FABRIC_PEERS_PER_ORG}; j++)); do
         run_in_org_cli ${i} "peer lifecycle chaincode install ${CHAINCODE_ID}.tar.gz --peerAddresses peer${j}.org${i}:7051 --tls --tlsRootCertFiles ${FABRIC_CFG_PATH}/${CRYPTO_CONFIG_DIRNAME}/peerOrganizations/org${i}/peers/peer${j}.org${i}/tls/ca.crt"
     done
@@ -69,7 +67,7 @@ for ((i = 1; i <= ${NUM_OF_ORG}; i++)); do
     run_in_org_cli $i "peer lifecycle chaincode approveformyorg -o orderer0.${ORDERER_DOMAIN}:7050 --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --version 1.0 --signature-policy \"${SIGNATURE_POLICY}\" --init-required --package-id ${PACKAGE_ID} --sequence 1 --tls true --cafile ${ORDERER_CA}"
 done
 
-sleep 3
+#sleep 3
 
 ALL_PEERS=""
 for ((i = 1; i <= ${NUM_OF_ORG}; i++)); do
@@ -84,10 +82,27 @@ for ((i = 1; i <= ${NUM_OF_ORG}; i++)); do
     done
 done
 
-echo "Committing the chaincode to all peers..."
-run_in_org_cli 1 "peer lifecycle chaincode commit ${ALL_PEERS} --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --version 1.0 --init-required --sequence 1 --signature-policy \"${SIGNATURE_POLICY}\" --tls true --cafile ${ORDERER_CA}"
+is_not_ready () {
+    run_in_org_cli 1 "peer lifecycle chaincode checkcommitreadiness -o orderer0.${ORDERER_DOMAIN}:7050 --tls true --cafile ${ORDERER_CA} --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --signature-policy \"${SIGNATURE_POLICY}\" --version 1.0 --init-required --sequence 1" |grep "false"
+}
 
-echo "Invoking the chaincode..."
-run_in_org_cli 1 "peer chaincode invoke --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --tls true --cafile ${ORDERER_CA} --isInit -c '{\"Args\":[\"${CHAINCODE_INIT_FUNCTION}\"]}'"
+i=0
+while is_not_ready 
+do
+    echo "Waiting for organizations to be ready for committing..."
+    ((i++))
+    if [[ $i -eq 10 ]]; then
+        break
+    fi
+done
+
+if ! is_not_ready 
+  then
+    echo "Committing the chaincode to all peers..."
+    run_in_org_cli 1 "peer lifecycle chaincode commit ${ALL_PEERS} --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --version 1.0 --init-required --sequence 1 --signature-policy \"${SIGNATURE_POLICY}\" --tls true --cafile ${ORDERER_CA}"
+
+    echo "Invoking the chaincode..."
+    run_in_org_cli 1 "peer chaincode invoke --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --tls true --cafile ${ORDERER_CA} --isInit -c '{\"Args\":[\"${CHAINCODE_INIT_FUNCTION}\"]}'"
+fi
 
 set -x
