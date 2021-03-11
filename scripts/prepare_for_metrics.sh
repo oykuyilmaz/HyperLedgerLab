@@ -8,11 +8,10 @@ export CHANNEL_ARTIFACTS_DIR_NAME="channel-artifacts"
 export CRYPTO_CONFIG_DIRNAME="crypto-config"
 export FABRIC_PEERS_PER_ORG=2 #how to get this?
 export ORG_NUMBER=1
-export FABRIC_VERSION=2.2.1
-export FABRIC_CA_VERSION=1.4.9
-export FABRIC_SAMPLES_LINK="https://bit.ly/2ysbOFE"
+#export FABRIC_VERSION=2.2.1
+#export FABRIC_CA_VERSION=1.4.9
 export CHAINCODE_ID="fabcar"
-export CHAINCODE_GO_PATH="fabric-samples/chaincode/fabcar/go"
+export CHAINCODE_DIR="inventory/blockchain/src/contract/${CHAINCODE_ID}"
 export CHAINCODE_LABEL="fabcar"
 export CHAINCODE_LANGUAGE="golang"
 export FABRIC_CFG_PATH="/etc/hyperledger/fabric"
@@ -21,6 +20,10 @@ export NUM_OF_ORG=2;
 
 run_in_org_cli () {
     kubectl -n "org$1" exec deploy/cli -- bash -c "$2"
+}
+
+copy_to_org_cli () {
+    kubectl -n "org$1" cp $2 $(kubectl -n "org$1" get pods -l app=cli --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'):$3
 }
 
 echo "Creating ${CHANNEL_NAME}..."
@@ -41,9 +44,8 @@ done
 
 echo "Creating and installing chaincode ${CHAINCODE_ID} for all organizations..."
 for ((i = 1; i <= ${NUM_OF_ORG}; i++)); do
-    run_in_org_cli ${i} "apk --no-cache add curl"
-    run_in_org_cli ${i} "curl -sSL ${FABRIC_SAMPLES_LINK} | bash -s -- ${FABRIC_VERSION} ${FABRIC_CA_VERSION}"
-    run_in_org_cli ${i} "peer lifecycle chaincode package ${CHAINCODE_ID}.tar.gz --path ${CHAINCODE_GO_PATH} --lang ${CHAINCODE_LANGUAGE} --label ${CHAINCODE_LABEL}"
+    copy_to_org_cli ${i} "${CHAINCODE_DIR}/." "./${CHAINCODE_ID}/"
+    run_in_org_cli ${i} "peer lifecycle chaincode package ${CHAINCODE_ID}.tar.gz --path \"./${CHAINCODE_ID}/\" --lang ${CHAINCODE_LANGUAGE} --label ${CHAINCODE_LABEL}"
     for ((j = 0; j < ${FABRIC_PEERS_PER_ORG}; j++)); do
         run_in_org_cli ${i} "peer lifecycle chaincode install ${CHAINCODE_ID}.tar.gz --peerAddresses peer${j}.org${i}:7051 --tls --tlsRootCertFiles ${FABRIC_CFG_PATH}/${CRYPTO_CONFIG_DIRNAME}/peerOrganizations/org${i}/peers/peer${j}.org${i}/tls/ca.crt"
     done
@@ -79,6 +81,7 @@ done
 echo "Committing the chaincode to all peers..."
 run_in_org_cli 1 "peer lifecycle chaincode commit ${ALL_PEERS} --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --version 1.0 --init-required --sequence 1 --signature-policy \"${SIGNATURE_POLICY}\" --tls true --cafile ${ORDERER_CA}"
 
+#TODO: Invoke is valid only for fabcar
 echo "Invoking the chaincode..."
 run_in_org_cli 1 "peer chaincode invoke --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --tls true --cafile ${ORDERER_CA} --isInit -c '{\"Args\":[\"queryAllCars\"]}'"
 
