@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 set +x
 
+parse_var () {
+    grep -v '^#' ${BLOCKCHAIN_SETUP_FILE} |grep -o "$1.*" |awk '{print $2}'
+}
+
+run_in_org_cli () {
+    kubectl -n "org$1" exec deploy/cli -- bash -c "$2"
+}
+
+copy_to_org_cli () {
+    kubectl -n "org$1" cp $2 $(kubectl -n "org$1" get pods -l app=cli --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'):$3
+}
+
 export BLOCKCHAIN_SETUP_FILE="inventory/blockchain/group_vars/blockchain-setup.yaml"
-export ORDERER_DOMAIN=$(parse_var 'fabric_orderer_domain')
+export ORDERER_DOMAIN=$(parse_var 'fabric_orderer_domain:')
 export CHANNEL_ARTIFACTS_DIR_NAME=$(parse_var 'channel_artifacts_dirname:')
 export CRYPTO_CONFIG_DIRNAME=$(parse_var 'crypto_config_dirname:')
 export NUM_OF_ORG=$(parse_var 'fabric_num_orgs:');
 export FABRIC_PEERS_PER_ORG=$(parse_var 'fabric_peers_per_org:')
-export CHANNEL_NAME=$(parse_var 'name:')
+export CHANNEL_NAME=$(parse_var '\sname:')
 export CHAINCODE_ID=$(parse_var 'id:')
 export CHAINCODE_LABEL="${CHAINCODE_ID}"
 export CHAINCODE_LANGUAGE=$(parse_var 'language:')
@@ -18,17 +30,7 @@ export ORDERER_CA="${FABRIC_CFG_PATH}/${CRYPTO_CONFIG_DIRNAME}/ordererOrganizati
 #TODO: Current init function is only valid for fabcar chaincode
 export CHAINCODE_INIT_FUNCTION="queryAllCars"
 
-run_in_org_cli () {
-    kubectl -n "org$1" exec deploy/cli -- bash -c "$2"
-}
 
-copy_to_org_cli () {
-    kubectl -n "org$1" cp $2 $(kubectl -n "org$1" get pods -l app=cli --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'):$3
-}
-
-parse_var () {
-    grep -v '^#' ${BLOCKCHAIN_SETUP_FILE} |grep -o "$1.*" |awk '{print $2}'
-}
 
 echo "Creating ${CHANNEL_NAME}..."
 run_in_org_cli 1 "peer channel create -c ${CHANNEL_NAME} --orderer orderer0.${ORDERER_DOMAIN}:7050 --tls --cafile ${ORDERER_CA} -f ./${CHANNEL_ARTIFACTS_DIR_NAME}/${CHANNEL_NAME}.tx"
