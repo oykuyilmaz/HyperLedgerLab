@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 set +x
 
-#TODO: Get these vaariables from blockchain_setup.yaml
-export CHANNEL_NAME="mychannel"
-export ORDERER_DOMAIN="orgorderer1"
-export CHANNEL_ARTIFACTS_DIR_NAME="channel-artifacts"
-export CRYPTO_CONFIG_DIRNAME="crypto-config"
-export FABRIC_PEERS_PER_ORG=2 #how to get this?
-export ORG_NUMBER=1
-#export FABRIC_VERSION=2.2.1
-#export FABRIC_CA_VERSION=1.4.9
-export CHAINCODE_ID="fabcar"
+export BLOCKCHAIN_SETUP_FILE="inventory/blockchain/group_vars/blockchain-setup.yaml"
+export ORDERER_DOMAIN=$(parse_var 'fabric_orderer_domain')
+export CHANNEL_ARTIFACTS_DIR_NAME=$(parse_var 'channel_artifacts_dirname:')
+export CRYPTO_CONFIG_DIRNAME=$(parse_var 'crypto_config_dirname:')
+export NUM_OF_ORG=$(parse_var 'fabric_num_orgs:');
+export FABRIC_PEERS_PER_ORG=$(parse_var 'fabric_peers_per_org:')
+export CHANNEL_NAME=$(parse_var 'name:')
+export CHAINCODE_ID=$(parse_var 'id:')
+export CHAINCODE_LABEL="${CHAINCODE_ID}"
+export CHAINCODE_LANGUAGE=$(parse_var 'language:')
 export CHAINCODE_DIR="inventory/blockchain/src/contract/${CHAINCODE_ID}"
-export CHAINCODE_LABEL="fabcar"
-export CHAINCODE_LANGUAGE="golang"
-export FABRIC_CFG_PATH="/etc/hyperledger/fabric"
+export FABRIC_CFG_PATH=$(run_in_org_cli 1 "printenv FABRIC_CFG_PATH")
 export ORDERER_CA="${FABRIC_CFG_PATH}/${CRYPTO_CONFIG_DIRNAME}/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer0.${ORDERER_DOMAIN}/msp/tlscacerts/tlsca.${ORDERER_DOMAIN}-cert.pem"
-export NUM_OF_ORG=2;
+
+#TODO: Current init function is only valid for fabcar chaincode
+export CHAINCODE_INIT_FUNCTION="queryAllCars"
 
 run_in_org_cli () {
     kubectl -n "org$1" exec deploy/cli -- bash -c "$2"
@@ -24,6 +24,10 @@ run_in_org_cli () {
 
 copy_to_org_cli () {
     kubectl -n "org$1" cp $2 $(kubectl -n "org$1" get pods -l app=cli --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'):$3
+}
+
+parse_var () {
+    grep -v '^#' ${BLOCKCHAIN_SETUP_FILE} |grep -o "$1.*" |awk '{print $2}'
 }
 
 echo "Creating ${CHANNEL_NAME}..."
@@ -81,8 +85,7 @@ done
 echo "Committing the chaincode to all peers..."
 run_in_org_cli 1 "peer lifecycle chaincode commit ${ALL_PEERS} --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --version 1.0 --init-required --sequence 1 --signature-policy \"${SIGNATURE_POLICY}\" --tls true --cafile ${ORDERER_CA}"
 
-#TODO: Invoke is valid only for fabcar
 echo "Invoking the chaincode..."
-run_in_org_cli 1 "peer chaincode invoke --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --tls true --cafile ${ORDERER_CA} --isInit -c '{\"Args\":[\"queryAllCars\"]}'"
+run_in_org_cli 1 "peer chaincode invoke --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --tls true --cafile ${ORDERER_CA} --isInit -c '{\"Args\":[\"${CHAINCODE_INIT_FUNCTION}\"]}'"
 
 set -x
