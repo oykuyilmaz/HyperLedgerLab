@@ -6,11 +6,11 @@ parse_var () {
 }
 
 run_in_org_cli () {
-    kubectl -n "org$1" exec deploy/cli -- bash -c "$2"
+    inventory/cluster/artifacts/kubectl -n "org$1" exec deploy/cli -- bash -c "$2"
 }
 
 copy_to_org_cli () {
-    kubectl -n "org$1" cp $2 $(kubectl -n "org$1" get pods -l app=cli --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'):$3
+    inventory/cluster/artifacts/kubectl -n "org$1" cp $2 $(inventory/cluster/artifacts/kubectl -n "org$1" get pods -l app=cli --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'):$3
 }
 
 export BLOCKCHAIN_SETUP_FILE="inventory/blockchain/group_vars/blockchain-setup.yaml"
@@ -66,7 +66,7 @@ SIGNATURE_POLICY+=")"
 
 echo "Approving chaincode for all organizations..."
 for ((i = 1; i <= ${NUM_OF_ORG}; i++)); do
-    PACKAGE_ID=$(run_in_org_cli ${i} "peer lifecycle chaincode queryinstalled --output json" |jq -r ".installed_chaincodes[0].package_id")
+    PACKAGE_ID=$(run_in_org_cli ${i} "peer lifecycle chaincode queryinstalled" |sed -n "s/Package ID:\s*\(\S*\),.*$/\1/p")
     run_in_org_cli $i "peer lifecycle chaincode approveformyorg -o orderer0.${ORDERER_DOMAIN}:7050 --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --version 1.0 --signature-policy \"${SIGNATURE_POLICY}\" --init-required --package-id ${PACKAGE_ID} --sequence 1 --tls true --cafile ${ORDERER_CA}"
 done
 
