@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set +x
+set +ex
 
 parse_var () {
     grep -v '^#' ${BLOCKCHAIN_SETUP_FILE} |grep -o "$1.*" |awk '{print $2}'
@@ -21,9 +21,12 @@ export NUM_OF_ORG=$(parse_var 'fabric_num_orgs:');
 export FABRIC_PEERS_PER_ORG=$(parse_var 'fabric_peers_per_org:')
 export CHANNEL_NAME=$(parse_var '\sname:')
 export CHAINCODE_ID=$(parse_var 'id:')
+export CHAINCODE_PATH=$(parse_var 'path:')
 export CHAINCODE_LABEL="${CHAINCODE_ID}"
 export CHAINCODE_LANGUAGE=$(parse_var 'language:')
-export CHAINCODE_DIR="inventory/blockchain/src/contract/${CHAINCODE_ID}"
+#TODO: Get this folder path from ansible?
+export SRC_DIR="inventory/blockchain/src"
+export CONTRACT_DIRNAME=$(parse_var 'contract_dirname:' |  tr -d '"')
 export FABRIC_CFG_PATH=$(run_in_org_cli 1 "printenv FABRIC_CFG_PATH")
 export ORDERER_CA="${FABRIC_CFG_PATH}/${CRYPTO_CONFIG_DIRNAME}/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer0.${ORDERER_DOMAIN}/msp/tlscacerts/tlsca.${ORDERER_DOMAIN}-cert.pem"
 
@@ -48,8 +51,8 @@ done
 
 echo "Creating and installing chaincode ${CHAINCODE_ID} for all organizations..."
 for ((i = 1; i <= ${NUM_OF_ORG}; i++)); do
-    copy_to_org_cli ${i} "${CHAINCODE_DIR}/." "./${CHAINCODE_ID}/"
-    run_in_org_cli ${i} "peer lifecycle chaincode package ${CHAINCODE_ID}.tar.gz --path \"./${CHAINCODE_ID}/${CHAINCODE_LANGUAGE}\" --lang ${CHAINCODE_LANGUAGE} --label ${CHAINCODE_LABEL}"
+    copy_to_org_cli ${i} "${SRC_DIR}/${CONTRACT_DIRNAME}/." "./${CONTRACT_DIRNAME}/"
+    run_in_org_cli ${i} "peer lifecycle chaincode package ${CHAINCODE_ID}.tar.gz --path \"./${CHAINCODE_PATH}/\" --lang ${CHAINCODE_LANGUAGE} --label ${CHAINCODE_LABEL}"
     for ((j = 0; j < ${FABRIC_PEERS_PER_ORG}; j++)); do
         run_in_org_cli ${i} "peer lifecycle chaincode install ${CHAINCODE_ID}.tar.gz --peerAddresses peer${j}.org${i}:7051 --tls --tlsRootCertFiles ${FABRIC_CFG_PATH}/${CRYPTO_CONFIG_DIRNAME}/peerOrganizations/org${i}/peers/peer${j}.org${i}/tls/ca.crt"
     done
@@ -105,4 +108,4 @@ if ! is_not_ready
     run_in_org_cli 1 "peer chaincode invoke --channelID ${CHANNEL_NAME} --name ${CHAINCODE_ID} --tls true --cafile ${ORDERER_CA} --isInit -c '{\"Args\":[\"${CHAINCODE_INIT_FUNCTION}\"]}'"
 fi
 
-set -x
+set -ex
