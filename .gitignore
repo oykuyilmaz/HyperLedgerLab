@@ -121,7 +121,7 @@ package-lock.json
 node_modules
 
 # Kubespray
-inventory/cluster/artifacts/
+#inventory/cluster/artifacts/
 
 # Hyperledger Fabric
 inventory/blockchain/fabric-config/channel-artifacts/
